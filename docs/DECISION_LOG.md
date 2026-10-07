@@ -12,3 +12,8 @@
 - 2026-10-07 [决策] 托盘图标不用第三方库，直接 Win32 Shell_NotifyIcon + 自绘 HICON，好控制像素、跟随任务栏深浅色
 - 2026-10-07 [踩坑] HTTPS 子模块克隆完整历史 13 分钟未完成；改用 SSH 浅克隆（--depth 1）11 秒完成
 - 2026-10-07 [踩坑] 从命令行后台启动的程序拿不到前台焦点，面板一弹出就因失焦关闭；加 `--open` 开发参数（StayOpen）来验证
+- 2026-10-07 [决策] 设置保持精简：每个工具一个开关，取数路线交给 CLI 的 --source auto；只给需要密钥的工具加输入框，哪个工具实际读不到再单独加选项（AZ 认可，觉得 CodexBar 设置太复杂）
+- 2026-10-07 [决策] fork 增加 config set-cookie / remove-cookie / remove-api-key / credentials，让设置窗口通过 CLI 管理密钥（DPAPI 加密的文件只由 CLI 写）
+- 2026-10-07 [决策] Cursor 条目名照 CodexBar 用 Total / Cursor / Third Party；按 API 价折算的 cost 显示为「API 价值 / 套餐」，不当作实际花费
+- 2026-10-07 [踩坑] 面板经常拿不到前台焦点，Deactivated 不触发导致点外面不收起；改为监听 EVENT_SYSTEM_FOREGROUND
+- 2026-10-07 [踩坑] WinUI ProgressBar 底轨固定约 1px 加不粗，改为自绘胶囊条

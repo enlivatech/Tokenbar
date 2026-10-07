@@ -11,9 +11,8 @@ namespace Tokenbar;
 
 public partial class App : Application
 {
-    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
-
     private Mutex? _singleInstance;
+    private SettingsWindow? _settingsWindow;
     private TrayIcon? _tray;
     private FlyoutWindow? _flyout;
     private UsageStore? _store;
@@ -50,13 +49,17 @@ public partial class App : Application
         }
 
         var cli = CliLocator.Find();
+        CliRunner.Path = cli;
         IEnumerable<IUsageFetcher> fetchers = cli is null
             ? Providers.All.Select(p => (IUsageFetcher)new SampleUsageFetcher(p.Id))
-            : Providers.All.Select(p => (IUsageFetcher)new CliUsageFetcher(p.Id, cli));
-        _store = new UsageStore(fetchers, usingSampleData: cli is null);
+            : Providers.All.Select(p => (IUsageFetcher)new CliUsageFetcher(p.Id));
+        var settings = AppSettings.Load();
+        _store = new UsageStore(fetchers, settings, usingSampleData: cli is null);
 
         _flyout = new FlyoutWindow(_store);
         _flyout.QuitRequested += Quit;
+        _flyout.SettingsRequested += page => OpenSettings(page);
+        settings.Changed += OnSettingsChanged;
 
         _tray = new TrayIcon();
         _tray.LeftClicked += () => _flyout.Toggle(_tray.GetIconRect());
@@ -66,7 +69,7 @@ public partial class App : Application
         UpdateTrayIcon();
 
         _timer = DispatcherQueue.GetForCurrentThread().CreateTimer();
-        _timer.Interval = RefreshInterval;
+        _timer.Interval = TimeSpan.FromMinutes(Math.Max(1, settings.RefreshMinutes));
         _timer.Tick += async (_, _) => await _store.RefreshAllAsync();
         _timer.Start();
 
@@ -75,8 +78,31 @@ public partial class App : Application
             _flyout.StayOpen = true;
             _flyout.ShowFlyout(_tray.GetIconRect());
         }
+        if (argv.Contains("--settings")) OpenSettings(SettingsPage.Providers);
 
         await _store.RefreshAllAsync();
+    }
+
+    private void OpenSettings(SettingsPage page)
+    {
+        if (_store is null) return;
+        _flyout?.HideFlyout();
+        if (_settingsWindow is null)
+        {
+            _settingsWindow = new SettingsWindow(_store);
+            _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        }
+        _settingsWindow.Open(page);
+    }
+
+    private void OnSettingsChanged()
+    {
+        if (_store is null || _timer is null) return;
+        var interval = TimeSpan.FromMinutes(Math.Max(1, _store.Settings.RefreshMinutes));
+        if (_timer.Interval != interval) _timer.Interval = interval;
+        foreach (var id in _store.Enabled.Where(id => _store.Get(id) is null))
+            _ = _store.RefreshAsync(id);
+        UpdateTrayIcon();
     }
 
     private void UpdateTrayIcon()

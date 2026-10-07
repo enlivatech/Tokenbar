@@ -23,12 +23,17 @@ public sealed partial class FlyoutWindow : Window
     private readonly UsageStore _store;
     private readonly nint _hwnd;
     private DateTime _hiddenAt = DateTime.MinValue;
+    private bool _showOverview = true;
+    private readonly Native.WinEventProc _foregroundProc;
+    private nint _foregroundHook;
 
     public event Action? QuitRequested;
+    public event Action<SettingsPage>? SettingsRequested;
 
     public FlyoutWindow(UsageStore store)
     {
         _store = store;
+        _foregroundProc = OnForegroundChanged;
         InitializeComponent();
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
 
@@ -48,7 +53,10 @@ public sealed partial class FlyoutWindow : Window
         Native.DwmSetWindowAttribute(_hwnd, Native.DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
 
         RefreshText.Text = Strings.Refresh;
+        SettingsText.Text = Strings.Settings;
+        AboutText.Text = Strings.About;
         QuitText.Text = Strings.Quit;
+        _store.Settings.Changed += () => { if (AppWindow.IsVisible) { Render(); ResizeToContent(); } };
 
         Activated += OnActivated;
         AppWindow.Closing += (_, e) => { e.Cancel = true; HideFlyout(); };
@@ -62,7 +70,7 @@ public sealed partial class FlyoutWindow : Window
 
     public bool IsOpen => AppWindow.IsVisible;
 
-    /// <summary>Don't light-dismiss on focus loss (dev <c>--open</c> runs can't take the foreground).</summary>
+    /// <summary>Don't light-dismiss until the user first focuses the panel (dev <c>--open</c> runs can't take the foreground).</summary>
     public bool StayOpen { get; set; }
 
     internal void Toggle(Native.RECT? anchor)
@@ -80,18 +88,47 @@ public sealed partial class FlyoutWindow : Window
         AppWindow.Show(true);
         Activate();
         Native.SetForegroundWindow(_hwnd);
+        if (_foregroundHook == 0)
+        {
+            _foregroundHook = Native.SetWinEventHook(Native.EVENT_SYSTEM_FOREGROUND, Native.EVENT_SYSTEM_FOREGROUND,
+                0, _foregroundProc, 0, 0, Native.WINEVENT_OUTOFCONTEXT);
+        }
     }
 
     public void HideFlyout()
     {
+        if (_foregroundHook != 0)
+        {
+            Native.UnhookWinEvent(_foregroundHook);
+            _foregroundHook = 0;
+        }
         if (!AppWindow.IsVisible) return;
         _hiddenAt = DateTime.UtcNow;
         AppWindow.Hide();
     }
 
+    // The flyout often never becomes the active window (focus-steal rules), so Deactivated alone
+    // can't be trusted for light-dismiss; any other window coming to the foreground also closes it.
+    private void OnForegroundChanged(nint hook, uint ev, nint hwnd, int idObject, int idChild, uint thread, uint time)
+    {
+        if (hwnd == _hwnd)
+        {
+            StayOpen = false;
+            return;
+        }
+        if (!StayOpen) HideFlyout();
+    }
+
     private void OnActivated(object sender, WindowActivatedEventArgs args)
     {
-        if (args.WindowActivationState == WindowActivationState.Deactivated && !StayOpen) HideFlyout();
+        if (args.WindowActivationState == WindowActivationState.Deactivated)
+        {
+            if (!StayOpen) HideFlyout();
+        }
+        else if (args.WindowActivationState == WindowActivationState.PointerActivated)
+        {
+            StayOpen = false;
+        }
     }
 
     private void Root_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -102,6 +139,10 @@ public sealed partial class FlyoutWindow : Window
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await _store.RefreshAllAsync();
 
     private void Quit_Click(object sender, RoutedEventArgs e) => QuitRequested?.Invoke();
+
+    private void Settings_Click(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(SettingsPage.General);
+
+    private void About_Click(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(SettingsPage.About);
 
     private double Scale => Native.GetDpiForWindow(_hwnd) / 96.0;
 
@@ -150,42 +191,59 @@ public sealed partial class FlyoutWindow : Window
         TabGrid.ColumnDefinitions.Clear();
         TabGrid.RowDefinitions.Clear();
         var providers = _store.Enabled;
-        for (int c = 0; c < TabColumns; c++) TabGrid.ColumnDefinitions.Add(new ColumnDefinition());
-        int rows = (providers.Count + TabColumns - 1) / TabColumns;
-        for (int r = 0; r < rows; r++) TabGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        // Overview only earns its place when there is more than one tool to compare.
+        bool hasOverview = providers.Count > 1;
+        if (!hasOverview) _showOverview = false;
 
-        for (int i = 0; i < providers.Count; i++)
+        var tabs = new List<Button>();
+        if (hasOverview)
         {
-            var tab = BuildTab(providers[i]);
-            Grid.SetColumn(tab, i % TabColumns);
-            Grid.SetRow(tab, i / TabColumns);
-            TabGrid.Children.Add(tab);
+            tabs.Add(BuildTab(Strings.Overview, Strings.Overview, fg => new FontIcon { Glyph = "\uF0E2", FontSize = 16, Foreground = fg },
+                _showOverview, null, null, () => _showOverview = true));
+        }
+        foreach (var id in providers)
+        {
+            var info = Providers.Get(id);
+            var snapshot = _store.Get(id);
+            // Mini meter under each tab shows remaining primary quota, like CodexBar's switcher.
+            var remaining = snapshot?.Primary?.RemainingPercent ?? snapshot?.Secondary?.RemainingPercent;
+            tabs.Add(BuildTab(info.TabName, info.DisplayName, fg => ProviderIconFactory.Create(info.IconName, 16, fg),
+                !_showOverview && id == _store.Selected, remaining ?? -1, BrandBrush(info),
+                () => { _showOverview = false; _store.Selected = id; }));
+        }
+
+        for (int c = 0; c < TabColumns; c++) TabGrid.ColumnDefinitions.Add(new ColumnDefinition());
+        int rows = (tabs.Count + TabColumns - 1) / TabColumns;
+        for (int r = 0; r < rows; r++) TabGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (int i = 0; i < tabs.Count; i++)
+        {
+            Grid.SetColumn(tabs[i], i % TabColumns);
+            Grid.SetRow(tabs[i], i / TabColumns);
+            TabGrid.Children.Add(tabs[i]);
         }
     }
 
-    private Button BuildTab(ProviderId id)
+    /// <param name="remaining">Meter value; null hides the meter, negative shows an empty track.</param>
+    private Button BuildTab(string label, string tooltip, Func<Brush, FrameworkElement> icon, bool selected,
+        double? remaining, Brush? meterBrush, Action select)
     {
-        var info = Providers.Get(id);
-        bool selected = id == _store.Selected;
         var fg = selected ? Brush("TextOnAccentFillColorPrimaryBrush") : Brush("TextFillColorPrimaryBrush");
 
         var panel = new StackPanel { Spacing = 3, HorizontalAlignment = HorizontalAlignment.Stretch };
-        var icon = ProviderIconFactory.Create(info.IconName, 16, fg);
-        icon.HorizontalAlignment = HorizontalAlignment.Center;
-        panel.Children.Add(icon);
+        var glyph = icon(fg);
+        glyph.HorizontalAlignment = HorizontalAlignment.Center;
+        panel.Children.Add(glyph);
         panel.Children.Add(new TextBlock
         {
-            Text = info.TabName,
+            Text = label,
             FontSize = 11,
             Foreground = fg,
             HorizontalAlignment = HorizontalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
         });
-
-        // Mini meter under each tab shows remaining primary quota, like CodexBar's switcher.
-        var snapshot = _store.Get(id);
-        var remaining = snapshot?.Primary?.RemainingPercent ?? snapshot?.Secondary?.RemainingPercent;
-        panel.Children.Add(MiniMeter(remaining, selected ? fg : BrandBrush(info)));
+        panel.Children.Add(remaining is double r
+            ? MiniMeter(r < 0 ? null : r, selected ? fg : meterBrush ?? fg)
+            : new Border { Height = 2, Margin = new Thickness(0, 2, 0, 0) });
 
         var button = new Button
         {
@@ -198,10 +256,10 @@ public sealed partial class FlyoutWindow : Window
             button.Resources["ButtonBackgroundPointerOver"] = Brush("AccentFillColorSecondaryBrush");
             button.Resources["ButtonBackgroundPressed"] = Brush("AccentFillColorTertiaryBrush");
         }
-        ToolTipService.SetToolTip(button, info.DisplayName);
+        ToolTipService.SetToolTip(button, tooltip);
         button.Click += (_, _) =>
         {
-            _store.Selected = id;
+            select();
             Render();
             ResizeToContent();
         };
@@ -212,16 +270,16 @@ public sealed partial class FlyoutWindow : Window
     {
         var track = new Grid
         {
-            Height = 3,
-            Margin = new Thickness(8, 1, 8, 0),
-            CornerRadius = new CornerRadius(1.5),
+            Height = 2,
+            Margin = new Thickness(8, 2, 8, 0),
+            CornerRadius = new CornerRadius(1),
             Background = Brush("ControlStrongFillColorDisabledBrush"),
         };
         if (remaining is double r)
         {
             track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(r, 0.001), GridUnitType.Star) });
             track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(100 - r, 0.001), GridUnitType.Star) });
-            var bar = new Border { Background = fill, CornerRadius = new CornerRadius(1.5) };
+            var bar = new Border { Background = fill, CornerRadius = new CornerRadius(1) };
             track.Children.Add(bar);
         }
         return track;
@@ -245,6 +303,11 @@ public sealed partial class FlyoutWindow : Window
     private void RenderContent()
     {
         ContentPanel.Children.Clear();
+        if (_showOverview)
+        {
+            RenderOverview();
+            return;
+        }
         var info = Providers.Get(_store.Selected);
         var snapshot = _store.Get(_store.Selected);
         var brand = BrandBrush(info);
@@ -318,6 +381,174 @@ public sealed partial class FlyoutWindow : Window
         }
     }
 
+    private void RenderOverview()
+    {
+        var enabled = _store.Enabled;
+        var header = new Grid();
+        header.Children.Add(new TextBlock { Text = Strings.Overview, Style = TextStyle("SubtitleTextBlockStyle") });
+        if (_store.AnyLoading)
+            header.Children.Add(new ProgressRing { Width = 16, Height = 16, IsActive = true, HorizontalAlignment = HorizontalAlignment.Right });
+        ContentPanel.Children.Add(header);
+
+        if (_store.UsingSampleData)
+            ContentPanel.Children.Add(new InfoBar { IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Informational, Message = Strings.SampleData });
+
+        var spends = enabled
+            .Select(id => (Id: id, Spend: _store.Get(id)?.Spend))
+            .Where(x => x.Spend is not null)
+            .Select(x => (x.Id, Spend: x.Spend!))
+            .ToList();
+        if (spends.Count > 0) ContentPanel.Children.Add(SpendSummaryCard(spends, enabled.Count));
+
+        var cards = new StackPanel { Spacing = 6 };
+        foreach (var id in enabled) cards.Children.Add(OverviewCard(id));
+        ContentPanel.Children.Add(cards);
+    }
+
+    private FrameworkElement SpendSummaryCard(IReadOnlyList<(ProviderId Id, SpendSummary Spend)> spends, int providerCount)
+    {
+        var panel = new StackPanel { Spacing = 4 };
+        var billed = spends.Where(s => !s.Spend.IsApiValue).ToList();
+        var apiValue = spends.Where(s => s.Spend.IsApiValue).ToList();
+        if (billed.Count > 0)
+        {
+            SpendGroup(panel, Strings.SpendSummaryTitle, billed);
+            panel.Children.Add(Secondary(Strings.SpendCoverage(billed.Count, providerCount)));
+        }
+        if (apiValue.Count > 0)
+        {
+            if (billed.Count > 0) panel.Children.Add(new Border { Height = 6 });
+            SpendGroup(panel, Strings.ApiValueTitle, apiValue);
+            panel.Children.Add(Secondary(Strings.ApiValueHint));
+        }
+        return Card(panel);
+    }
+
+    /// <summary>One provider: "Title · Cursor", big amount, plan line. Several: title, then a row per provider.</summary>
+    private static void SpendGroup(StackPanel panel, string title, IReadOnlyList<(ProviderId Id, SpendSummary Spend)> items)
+    {
+        static string Amount(SpendSummary s) => $"{s.CurrencySymbol} {s.Used:0.00}";
+        static string? Plan(SpendSummary s) => s.Limit is double l ? Strings.PlanIncluded(s.CurrencySymbol, l) : null;
+
+        if (items.Count == 1)
+        {
+            var (id, s) = items[0];
+            panel.Children.Add(Secondary($"{title} · {Providers.Get(id).DisplayName}"));
+            panel.Children.Add(new TextBlock { Text = Amount(s), Style = TextStyle("SubtitleTextBlockStyle") });
+            if (Plan(s) is { } plan) panel.Children.Add(Secondary(plan));
+            return;
+        }
+
+        panel.Children.Add(Secondary(title));
+        foreach (var (id, s) in items)
+        {
+            var right = Plan(s) is { } plan ? $"{Amount(s)} / {plan}" : Amount(s);
+            panel.Children.Add(TwoColumn(
+                new TextBlock { Text = Providers.Get(id).DisplayName, Style = TextStyle("BodyStrongTextBlockStyle") },
+                new TextBlock { Text = right, Style = TextStyle("BodyTextBlockStyle") }));
+        }
+    }
+
+    private FrameworkElement OverviewCard(ProviderId id)
+    {
+        var info = Providers.Get(id);
+        var snapshot = _store.Get(id);
+        var brand = BrandBrush(info);
+        var body = new StackPanel { Spacing = 6 };
+
+        var titleRow = new Grid { ColumnSpacing = 8 };
+        titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var icon = ProviderIconFactory.Create(info.IconName, 14, Brush("TextFillColorPrimaryBrush"));
+        icon.VerticalAlignment = VerticalAlignment.Center;
+        titleRow.Children.Add(icon);
+        var name = new TextBlock { Text = info.DisplayName, Style = TextStyle("BodyStrongTextBlockStyle") };
+        Grid.SetColumn(name, 1);
+        titleRow.Children.Add(name);
+        string status = snapshot is null
+            ? (_store.IsLoading(id) ? Strings.Loading : "")
+            : snapshot.PlanName ?? "";
+        var statusText = Secondary(status);
+        statusText.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(statusText, 2);
+        titleRow.Children.Add(statusText);
+        body.Children.Add(titleRow);
+
+        var quotas = snapshot?.AllWindows.Where(w => !w.IsInformational).Take(3).ToList() ?? [];
+        foreach (var w in quotas) body.Children.Add(CompactWindowRow(w, brand));
+
+        if (snapshot?.Error is { } error && quotas.Count == 0)
+        {
+            body.Children.Add(new TextBlock
+            {
+                Text = error,
+                Style = TextStyle("CaptionTextBlockStyle"),
+                Foreground = Brush("SystemFillColorCautionBrush"),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxLines = 2,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+        else if (snapshot?.Spend is { } spend && quotas.Count == 0)
+        {
+            body.Children.Add(Secondary(spend.IsApiValue
+                ? Strings.ApiValueLine(spend.CurrencySymbol, spend.Used, spend.Limit)
+                : Strings.SpendLine(spend.Period, $"{spend.CurrencySymbol} {spend.Used:0.00}")));
+        }
+
+        var button = new Button
+        {
+            Style = (Style)Application.Current.Resources["OverviewCardButtonStyle"],
+            Content = body,
+        };
+        button.Click += (_, _) =>
+        {
+            _showOverview = false;
+            _store.Selected = id;
+            Render();
+            ResizeToContent();
+        };
+        return button;
+    }
+
+    private static FrameworkElement CompactWindowRow(RateWindow w, Brush brand)
+    {
+        var row = new Grid { ColumnSpacing = 6 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });
+
+        var title = new TextBlock { Text = Strings.WindowTitle(w.Title), Style = TextStyle("CaptionTextBlockStyle"), TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+        var meter = Meter(w.UsedPercent, brand);
+        meter.VerticalAlignment = VerticalAlignment.Center;
+        var used = new TextBlock { Text = $"{w.UsedPercent:0}%", Style = TextStyle("CaptionTextBlockStyle"), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        var reset = Secondary(w.ResetsAt is { } at ? Strings.ShortDuration(at - DateTimeOffset.Now) : "");
+        reset.TextWrapping = TextWrapping.NoWrap;
+        reset.HorizontalAlignment = HorizontalAlignment.Right;
+        reset.VerticalAlignment = VerticalAlignment.Center;
+
+        Grid.SetColumn(meter, 1);
+        Grid.SetColumn(used, 2);
+        Grid.SetColumn(reset, 3);
+        row.Children.Add(title);
+        row.Children.Add(meter);
+        row.Children.Add(used);
+        row.Children.Add(reset);
+        return row;
+    }
+
+    private static Border Card(UIElement child) => new()
+    {
+        Child = child,
+        Padding = new Thickness(12, 10, 12, 10),
+        CornerRadius = new CornerRadius(8),
+        BorderThickness = new Thickness(1),
+        Background = Brush("CardBackgroundFillColorDefaultBrush"),
+        BorderBrush = Brush("CardStrokeColorDefaultBrush"),
+    };
+
     private FrameworkElement WindowSection(RateWindow w, Brush brand)
     {
         var section = new StackPanel { Spacing = 6 };
@@ -336,11 +567,22 @@ public sealed partial class FlyoutWindow : Window
     private FrameworkElement SpendSection(SpendSummary s, Brush brand)
     {
         var section = new StackPanel { Spacing = 6 };
+        double? percent = s.Limit is > 0 ? s.Used / s.Limit * 100 : null;
+        if (s.IsApiValue)
+        {
+            section.Children.Add(new TextBlock { Text = Strings.ApiValueTitle, Style = TextStyle("BodyStrongTextBlockStyle") });
+            if (percent is double ap) section.Children.Add(Meter(ap, brand));
+            section.Children.Add(TwoColumn(
+                new TextBlock { Text = Strings.ApiValueLine(s.CurrencySymbol, s.Used, s.Limit), Style = TextStyle("BodyTextBlockStyle") },
+                Secondary(percent is double app ? Strings.OfPlan(app) : "")));
+            section.Children.Add(Secondary(Strings.ApiValueHint));
+            return section;
+        }
+
         section.Children.Add(new TextBlock { Text = Strings.Spend, Style = TextStyle("BodyStrongTextBlockStyle") });
         string amount = s.Limit is double limit
             ? $"{s.CurrencySymbol} {s.Used:0.00} / {s.CurrencySymbol} {limit:0.00}"
             : $"{s.CurrencySymbol} {s.Used:0.00}";
-        double? percent = s.Limit is > 0 ? s.Used / s.Limit * 100 : null;
         if (percent is double p) section.Children.Add(Meter(p, brand));
         section.Children.Add(TwoColumn(
             new TextBlock { Text = Strings.SpendLine(s.Period, amount), Style = TextStyle("BodyTextBlockStyle") },
@@ -348,14 +590,23 @@ public sealed partial class FlyoutWindow : Window
         return section;
     }
 
-    private static ProgressBar Meter(double percent, Brush brand) => new()
+    private const double MeterHeight = 6;
+
+    private static Grid Meter(double percent, Brush brand)
     {
-        Minimum = 0,
-        Maximum = 100,
-        Value = Math.Clamp(percent, 0, 100),
-        Foreground = brand,
-        MinHeight = 4,
-    };
+        double p = Math.Clamp(percent, 0, 100);
+        var track = new Grid
+        {
+            Height = MeterHeight,
+            CornerRadius = new CornerRadius(MeterHeight / 2),
+            Background = Brush("ControlStrongFillColorDisabledBrush"),
+        };
+        track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(p, 0.001), GridUnitType.Star) });
+        track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(100 - p, 0.001), GridUnitType.Star) });
+        if (p > 0)
+            track.Children.Add(new Border { Background = brand, CornerRadius = new CornerRadius(MeterHeight / 2) });
+        return track;
+    }
 
     private static Grid TwoColumn(FrameworkElement left, FrameworkElement right)
     {

@@ -41,7 +41,8 @@ public sealed record SpendSummary(
     double? Limit,
     string CurrencySymbol,
     string Period,
-    DateTimeOffset? ResetsAt);
+    DateTimeOffset? ResetsAt,
+    bool IsApiValue = false);
 
 public sealed record DetailLine(string Title, string Value);
 

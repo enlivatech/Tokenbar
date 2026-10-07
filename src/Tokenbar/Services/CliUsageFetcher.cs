@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using Tokenbar.Models;
 
@@ -10,7 +8,7 @@ namespace Tokenbar.Services;
 /// Gets usage from the Win-CodexBar Rust CLI (<c>codexbar usage -p &lt;id&gt; --json</c>), which owns
 /// all provider auth, cookies and HTTP logic. This class only maps its JSON into our models.
 /// </summary>
-public sealed class CliUsageFetcher(ProviderId provider, string cliPath) : IUsageFetcher
+public sealed class CliUsageFetcher(ProviderId provider) : IUsageFetcher
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(90);
 
@@ -19,10 +17,10 @@ public sealed class CliUsageFetcher(ProviderId provider, string cliPath) : IUsag
     public async Task<UsageSnapshot> FetchAsync(CancellationToken cancellationToken)
     {
         var info = Providers.Get(Provider);
-        string stdout, stderr;
+        CliResult result;
         try
         {
-            (stdout, stderr) = await RunAsync(cliPath, ["usage", "-p", info.CliName, "--json", "--no-color"], cancellationToken);
+            result = await CliRunner.RunAsync(["usage", "-p", info.CliName, "--json"], timeout: Timeout, ct: cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -31,48 +29,22 @@ public sealed class CliUsageFetcher(ProviderId provider, string cliPath) : IUsag
 
         try
         {
-            return Parse(Provider, stdout);
+            return Parse(Provider, result.Stdout);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException)
         {
-            var message = string.IsNullOrWhiteSpace(stderr) ? ex.Message : stderr.Trim();
-            return ErrorSnapshot(message);
+            return ErrorSnapshot(string.IsNullOrWhiteSpace(result.Stderr) ? ex.Message : result.Stderr.Trim());
         }
     }
 
     private UsageSnapshot ErrorSnapshot(string message) =>
         new(Provider, DateTimeOffset.Now, null, null, null, [], Error: message);
 
-    private static async Task<(string Stdout, string Stderr)> RunAsync(string exe, string[] args, CancellationToken ct)
+    /// <summary>Lane names the CLI JSON omits; matches macOS CodexBar's provider descriptors.</summary>
+    private static readonly Dictionary<ProviderId, (string? Primary, string? Secondary, string? Model)> LaneLabels = new()
     {
-        var psi = new ProcessStartInfo(exe)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-        foreach (var a in args) psi.ArgumentList.Add(a);
-
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException($"无法启动 {exe}");
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(Timeout);
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
-        var stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
-        try
-        {
-            await process.WaitForExitAsync(timeout.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
-            if (ct.IsCancellationRequested) throw;
-            throw new TimeoutException("读取用量超时");
-        }
-        return (await stdoutTask, await stderrTask);
-    }
+        [ProviderId.Cursor] = ("Total", "Cursor", "Third Party"),
+    };
 
     internal static UsageSnapshot Parse(ProviderId provider, string json)
     {
@@ -97,8 +69,9 @@ public sealed class CliUsageFetcher(ProviderId provider, string cliPath) : IUsag
         }
 
         var usage = root.GetProperty("usage");
-        var primary = Window(usage, "primary", Str(usage, "primary_label"), "Session");
-        var secondary = Window(usage, "secondary", Str(usage, "secondary_label"), "Weekly");
+        var labels = LaneLabels.GetValueOrDefault(provider);
+        var primary = Window(usage, "primary", Str(usage, "primary_label") ?? labels.Primary, "Session");
+        var secondary = Window(usage, "secondary", Str(usage, "secondary_label") ?? labels.Secondary, "Weekly");
         if (root.TryGetProperty("pace", out var pace) && pace.ValueKind == JsonValueKind.Object)
         {
             if (primary is not null && Pace(pace, "primary") is { } pp) primary = primary with { Pace = pp };
@@ -106,7 +79,7 @@ public sealed class CliUsageFetcher(ProviderId provider, string cliPath) : IUsag
         }
 
         var extra = new List<RateWindow>();
-        if (Window(usage, "model_specific", null, "Model") is { } model) extra.Add(model);
+        if (Window(usage, "model_specific", labels.Model, "Model") is { } model) extra.Add(model);
         if (Window(usage, "tertiary", null, "Monthly") is { } tertiary) extra.Add(tertiary);
         if (usage.TryGetProperty("extra_rate_windows", out var named) && named.ValueKind == JsonValueKind.Array)
         {
@@ -120,12 +93,17 @@ public sealed class CliUsageFetcher(ProviderId provider, string cliPath) : IUsag
         SpendSummary? spend = null;
         if (root.TryGetProperty("cost", out var cost) && cost.ValueKind == JsonValueKind.Object)
         {
+            var period = Str(cost, "period") ?? "";
+            // "Token cost (metered, …)" is the usage priced at API rates, not money actually billed.
+            bool apiValue = period.Contains("token cost", StringComparison.OrdinalIgnoreCase)
+                || period.Contains("metered", StringComparison.OrdinalIgnoreCase);
             spend = new SpendSummary(
                 Num(cost, "used") ?? 0,
                 Num(cost, "limit"),
                 Str(cost, "currency_symbol") ?? CurrencySymbol(Str(cost, "currency_code")),
-                Str(cost, "period") ?? "",
-                Date(cost, "resets_at"));
+                apiValue ? "" : period,
+                Date(cost, "resets_at"),
+                apiValue);
         }
 
         var details = new List<DetailLine>();
@@ -142,7 +120,7 @@ public sealed class CliUsageFetcher(ProviderId provider, string cliPath) : IUsag
         return new UsageSnapshot(
             provider,
             Date(usage, "updated_at") ?? DateTimeOffset.Now,
-            Str(usage, "login_method"),
+            PlanLabel.Format(provider, Str(usage, "login_method")),
             primary,
             secondary,
             extra,

@@ -16,5 +16,6 @@ texts must ship with any distribution of Tokenbar.
 
 - Source: https://github.com/steipete/CodexBar
 - Used for: the tray meter design (two-bar icon geometry ported from `Sources/CodexBar/IconRenderer.swift`)
-  and the popover layout.
+  and the popover layout; `src/Tokenbar/Assets/ProviderIcons/grok.svg` is
+  `Sources/CodexBar/Resources/ProviderIcon-grok.svg`.
 - License: MIT, Copyright (c) 2026 Peter Steinberger.

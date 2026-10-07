@@ -14,7 +14,7 @@
 - 架构：fork Win-CodexBar（`enlivatech/Win-CodexBar`，子模块 `vendor/Win-CodexBar`），只用它的 Rust CLI 取数据（`--source auto` 默认自动选路）；界面是自己写的 C# + WinUI 3。设置保持精简（AZ 认可）：每个工具一个开关，只有需要密钥的工具才有输入框。
 - 托盘图标：Win32 `Shell_NotifyIcon` 自绘，CodexBar 双条几何，几乎铺满托盘格子，跟随任务栏深浅色，过期变暗。
 - 弹出面板：亚克力、Fluent 控件；顶部标签（总览 + 各工具，名字下 2px 品牌色迷你条）；用量条是自绘 6px 胶囊（WinUI ProgressBar 底轨只有 1px）；滚动条隐藏（滚轮仍可滚）；底部刷新、设置、关于、退出。
-- 总览页：API 价值 / 花费汇总卡 + 每个工具一张卡（前三条额度：名称、条、百分比、短格式重置时间），点卡片进入该工具。
+- 总览页：实际花费汇总卡（只有工具返回真实扣费时才出现；Cursor 的 API 价值只在 Cursor 页显示）+ 每个工具一张卡（前三条额度：名称、条、百分比、短格式重置时间），点卡片进入该工具。
 - 点外面收起：监听前台窗口变化（`SetWinEventHook(EVENT_SYSTEM_FOREGROUND)`），不再只靠 Deactivated（面板常拿不到焦点）。
 - 设置窗口（Mica + NavigationView）：通用（开机自启、刷新间隔、立即刷新）、工具（开关、状态、数据来源说明、API Key / Cookie 保存与移除、Claude 凭据授权）、关于。
 - 套餐名简化（`PlanLabel`：Claude `default_claude_ai` → Pro 等）。

@@ -17,3 +17,4 @@
 - 2026-10-07 [决策] Cursor 条目名照 CodexBar 用 Total / Cursor / Third Party；按 API 价折算的 cost 显示为「API 价值 / 套餐」，不当作实际花费
 - 2026-10-07 [踩坑] 面板经常拿不到前台焦点，Deactivated 不触发导致点外面不收起；改为监听 EVENT_SYSTEM_FOREGROUND
 - 2026-10-07 [踩坑] WinUI ProgressBar 底轨固定约 1px 加不粗，改为自绘胶囊条
+- 2026-10-07 [决策] Cursor 的 API 价值只放在 Cursor 页，不进总览；总览只汇总真实扣费（AZ 要求）

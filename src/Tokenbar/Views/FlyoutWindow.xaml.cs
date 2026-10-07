@@ -395,7 +395,7 @@ public sealed partial class FlyoutWindow : Window
 
         var spends = enabled
             .Select(id => (Id: id, Spend: _store.Get(id)?.Spend))
-            .Where(x => x.Spend is not null)
+            .Where(x => x.Spend is { IsApiValue: false })
             .Select(x => (x.Id, Spend: x.Spend!))
             .ToList();
         if (spends.Count > 0) ContentPanel.Children.Add(SpendSummaryCard(spends, enabled.Count));
@@ -408,19 +408,8 @@ public sealed partial class FlyoutWindow : Window
     private FrameworkElement SpendSummaryCard(IReadOnlyList<(ProviderId Id, SpendSummary Spend)> spends, int providerCount)
     {
         var panel = new StackPanel { Spacing = 4 };
-        var billed = spends.Where(s => !s.Spend.IsApiValue).ToList();
-        var apiValue = spends.Where(s => s.Spend.IsApiValue).ToList();
-        if (billed.Count > 0)
-        {
-            SpendGroup(panel, Strings.SpendSummaryTitle, billed);
-            panel.Children.Add(Secondary(Strings.SpendCoverage(billed.Count, providerCount)));
-        }
-        if (apiValue.Count > 0)
-        {
-            if (billed.Count > 0) panel.Children.Add(new Border { Height = 6 });
-            SpendGroup(panel, Strings.ApiValueTitle, apiValue);
-            panel.Children.Add(Secondary(Strings.ApiValueHint));
-        }
+        SpendGroup(panel, Strings.SpendSummaryTitle, spends);
+        panel.Children.Add(Secondary(Strings.SpendCoverage(spends.Count, providerCount)));
         return Card(panel);
     }
 

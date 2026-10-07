@@ -13,6 +13,25 @@ AI 编程工具（Codex、Claude Code 等）用量的系统托盘/菜单栏应�
 
 完成标准：（和 AZ 确认后补上）
 
+## 平台范围
+
+- 第一步只做 Windows 小工具：系统托盘 + Fluent 弹出面板，目标是做出比 Win-CodexBar 好看、像 Win11 原生的版本。
+- macOS 上 CodexBar 已经很成熟，暂不重做；以后扩展到其他平台时再定，各平台单独实现原生 UI，共用一份数据契约（各工具用量的读取规则与数据结构）。
+
+| 平台 | 设计语言 | 框架（暂定） |
+|---|---|---|
+| Windows | Fluent（Win11） | C# + WinUI 3（Windows App SDK） |
+| macOS | HIG（菜单栏） | 暂不做，用 CodexBar |
+| 其他平台 | 各自官方规范 | 各自默认框架，扩展时再定 |
+
+- 每个平台用自己的原生设计语言、原生图标（含托盘/菜单栏图标、应用图标），不做一套界面套所有平台。
+
+## 参考项目
+
+- [steipete/CodexBar](https://github.com/steipete/CodexBar)：macOS 菜单栏原版，MIT。
+- [nesszer/Win-CodexBar](https://github.com/nesszer/Win-CodexBar)：CodexBar 的 Windows fork，MIT。
+- 两者都是 MIT：可以复用代码，但要保留原作者版权声明和许可证原文。
+
 ## 约束与工作入口
 
 - 规则：`AGENTS.md`（`CLAUDE.md`、`GEMINI.md` 指向它）。

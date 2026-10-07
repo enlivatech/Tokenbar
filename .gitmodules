@@ -1,4 +1,4 @@
 [submodule "vendor/Win-CodexBar"]
 	path = vendor/Win-CodexBar
-	url = git@github.com:enlivatech/Win-CodexBar.git
+	url = https://github.com/enlivatech/Win-CodexBar.git
 	shallow = true

@@ -5,7 +5,7 @@
 - 相对路径：Development/Tokenbar
 - 交接入口：HANDOFF.md（决策历史在 docs/DECISION_LOG.md）
 - 同步方式：git
-- 获取来源：https://github.com/enlivatech/Tokenbar（私有），分支 `main`
+- 获取来源：https://github.com/enlivatech/Tokenbar（公开，MIT，2026-10-07 起），分支 `main`
 
 ## 目标与完成标准
 

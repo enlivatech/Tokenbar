@@ -1,7 +1,7 @@
 # 项目交接
 
 - 项目标识：be632f3a-2c8c-4a66-b617-11ff50993287
-- 更新时间：2026-10-07 20:55 China Standard Time
+- 更新时间：2026-10-07 21:05 China Standard Time
 - 本次工作者：Cursor Agent（Claude Opus 5.5），AZ-Laptop-7（Windows 11）
 - 状态：进行中
 
@@ -24,7 +24,10 @@
 
 ## 成果与版本
 
-- 分支 `main`，快照基于 `c1a3a9c`（之后的提交即本次成果）。
+- 分支 `main`，快照基于 `01f2fc9`（之后的提交即本次成果）。
+- 仓库 2026-10-07 起公开（MIT，`LICENSE`、`README.md`）。按 AZ-WORKFLOW，公开仓库平时只提交不推送，「交接项目」时再推。
+- `.gitmodules` 的子模块地址改成 HTTPS，方便别人克隆；本机 `.git/config` 里仍是 SSH。
+- 总览截图改名为 `docs/screenshots/overview.png`（旧的 `flyout-overview.png` 被看图程序占用，已从仓库移除，本地残留可删）。
 - 子模块 `vendor/Win-CodexBar` 指向 fork 的 `c02626e`（在上游 `09b4a95` 之上加了上面的 config 命令）。
 
 ## 已验证与未验证

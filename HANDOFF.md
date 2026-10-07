@@ -48,4 +48,4 @@
 - 托盘图标加上 CodexBar 的各工具装饰（Codex 眼睛、Claude 方块等），以及「合并图标 / 每个工具一个图标」模式。
 - 费用区（今天、近 30 天的 token 与花费，CLI 的 `cost` 命令）、Usage Dashboard / Status Page 链接、通知。
 - 打包：把 `codexbar.exe` 放进发布目录 `cli\`，做安装包与开机自启动。
-- `docs/PROVIDERS_RESEARCH.md` 由后台调研生成（各工具的认证与接口细节），作为修 CLI 时的参考。
+- `docs/PROVIDERS_RESEARCH.md`：各工具的认证与接口细节（从 Win-CodexBar / CodexBar 源码整理），修 CLI 时参考。要点：Gemini 个人 / AI Pro / Ultra 账号的 Gemini CLI OAuth 从 2026-06-18 起被 Google 停用，这类账号读不到 Gemini 用量，应提示改看 Antigravity；OpenCode Zen 依赖网站内部接口的 hash，上游一改版就会坏；Claude 接口容易 429，CLI 已做退避。

@@ -11,6 +11,10 @@
 
 AI 编程工具（Codex、Claude Code 等）用量的系统托盘/菜单栏应用：先做 Windows 原生版，再扩展到全平台，各平台用原生设计语言与框架
 
+第一版支持的工具（AZ 2026-10-07）：Codex、Claude Code、Cursor、Gemini、Antigravity、OpenCode（Zen / Go）、Grok、OpenRouter。
+
+面板内容照 CodexBar：每个工具显示各时间窗口（会话 / 每周等）的已用或剩余百分比、重置倒计时，能拿到的再显示费用和额度；托盘图标反映用量。
+
 完成标准：（和 AZ 确认后补上）
 
 ## 平台范围
@@ -20,7 +24,7 @@ AI 编程工具（Codex、Claude Code 等）用量的系统托盘/菜单栏应�
 
 | 平台 | 设计语言 | 框架（暂定） |
 |---|---|---|
-| Windows | Fluent（Win11） | C# + WinUI 3（Windows App SDK） |
+| Windows | Fluent（Win11） | C# + WinUI 3（Windows App SDK）界面 + Win-CodexBar 的 Rust CLI 取数据 |
 | macOS | HIG（菜单栏） | 暂不做，用 CodexBar |
 | 其他平台 | 各自官方规范 | 各自默认框架，扩展时再定 |
 
@@ -38,4 +42,6 @@ AI 编程工具（Codex、Claude Code 等）用量的系统托盘/菜单栏应�
 
 ## 环境与验证
 
-（建好后补上：平台、启动方式、验证命令）
+- 平台：Windows 10 19041+ / Windows 11，x64 与 ARM64；.NET 8 + Windows App SDK 2.5（自包含、免打包）。
+- 数据：Win-CodexBar 的 Rust CLI（子模块 `vendor/Win-CodexBar`），需要 Rust 工具链编译。
+- 构建、运行、验证命令见 `AGENTS.md`「项目规则」。

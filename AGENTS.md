@@ -20,6 +20,12 @@ AI 编程工具（Codex、Claude Code 等）用量的系统托盘/菜单栏应�
 
 ## 项目规则
 
-- 运行、构建、验证命令：（建好后补上）
+- 架构：`src/Tokenbar` 是 C# + WinUI 3 的托盘应用（只管界面）；所有工具的登录、Cookie、接口调用都交给 `vendor/Win-CodexBar`（enlivatech 的 fork，git 子模块，浅克隆）里的 Rust CLI，用 `codexbar usage -p <工具> --json` 取数据，`Services/CliUsageFetcher.cs` 负责把 JSON 转成界面模型。不要在 C# 里重写工具读取逻辑；CLI 有问题先修 fork，能回馈上游的提 PR。
+- 首次准备：`git submodule update --init --depth 1`，然后 `powershell -File scripts\build-cli.ps1`（编译 CLI，约 6 分钟，输出到 `vendor\Win-CodexBar\target\release\codexbar.exe`）。
+- 构建：`dotnet build src\Tokenbar\Tokenbar.csproj -c Debug -p:Platform=x64`。
+- 运行：`src\Tokenbar\bin\x64\Debug\net8.0-windows10.0.19041.0\Tokenbar.exe`；加 `--open` 启动即弹出面板且不因失焦关闭（命令行启动拿不到前台焦点，验证时用这个）。找不到 CLI 时自动用示例数据，面板上会提示。
+- 视觉验证：`scripts\capture.ps1` 截面板到 `docs\screenshots\flyout.png`；`scripts\icon-sheet.ps1` 把托盘图标各尺寸放大导出到 `docs\screenshots\tray-icons.png`。
+- 设计：界面照 macOS CodexBar（图标、额度显示、面板结构），但用 Win11 Fluent 原生控件和材质（亚克力、系统字体、主题色、ProgressBar），不要用网页或自绘去模仿。
+- 第三方许可：复用上游代码或资源时，在 `THIRD_PARTY_NOTICES.md` 登记。
 - 扩大范围或重构既有架构前，先和 AZ 确认。
 - 不得提交 `.env`、密钥、token、密码或个人数据。

@@ -88,13 +88,13 @@ public static class Providers
 {
     public static readonly IReadOnlyList<ProviderInfo> All =
     [
-        new(ProviderId.Codex, "Codex", "codex", "codex", "#49A3B0"),
-        new(ProviderId.Claude, "Claude", "claude", "claude", "#CC7C5E"),
-        new(ProviderId.Cursor, "Cursor", "cursor", "cursor", "#F54E00"),
+        new(ProviderId.Codex, "Codex", "codex", "codex", "#3B82F6"),
+        new(ProviderId.Claude, "Claude", "claude", "claude", "#E8803A"),
+        new(ProviderId.Cursor, "Cursor", "cursor", "cursor", "#22C55E"),
         new(ProviderId.Gemini, "Gemini", "gemini", "gemini", "#AB87EA"),
         new(ProviderId.Antigravity, "Antigravity", "antigravity", "antigravity", "#60BA7E"),
-        new(ProviderId.OpenCode, "OpenCode Zen", "opencode", "opencode", "#3B82F6"),
-        new(ProviderId.OpenCodeGo, "OpenCode Go", "opencodego", "opencodego", "#3B82F6"),
+        new(ProviderId.OpenCode, "OpenCode Zen", "opencode", "opencode", "#EAB308"),
+        new(ProviderId.OpenCodeGo, "OpenCode Go", "opencodego", "opencodego", "#EAB308"),
         new(ProviderId.Grok, "Grok", "grok", "grok", null),
         new(ProviderId.OpenRouter, "OpenRouter", "openrouter", "openrouter", "#6B7280"),
     ];

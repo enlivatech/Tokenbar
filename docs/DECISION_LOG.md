@@ -19,3 +19,4 @@
 - 2026-10-07 [踩坑] WinUI ProgressBar 底轨固定约 1px 加不粗，改为自绘胶囊条
 - 2026-10-07 [决策] Cursor 的 API 价值只放在 Cursor 页，不进总览；总览只汇总真实扣费（AZ 要求）
 - 2026-10-07 [决策] 仓库公开，许可证 MIT（和 CodexBar、Win-CodexBar 一致），允许 fork；提交作者邮箱保留不改历史（AZ 确认）；子模块地址改 HTTPS
+- 2026-10-07 [决策] 用量条配色按 AZ 指定：Codex 蓝 #3B82F6、Claude 橙 #E8803A、Cursor 绿 #22C55E、OpenCode（Zen / Go）黄 #EAB308；标签小条与用量条同色（选中标签也用品牌色）

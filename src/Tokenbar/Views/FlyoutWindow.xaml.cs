@@ -242,7 +242,7 @@ public sealed partial class FlyoutWindow : Window
             TextTrimming = TextTrimming.CharacterEllipsis,
         });
         panel.Children.Add(remaining is double r
-            ? MiniMeter(r < 0 ? null : r, selected ? fg : meterBrush ?? fg)
+            ? MiniMeter(r < 0 ? null : r, meterBrush ?? fg)
             : new Border { Height = 2, Margin = new Thickness(0, 2, 0, 0) });
 
         var button = new Button

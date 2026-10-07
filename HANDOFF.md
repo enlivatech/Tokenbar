@@ -1,7 +1,7 @@
 # 项目交接
 
 - 项目标识：be632f3a-2c8c-4a66-b617-11ff50993287
-- 更新时间：2026-10-07 21:05 China Standard Time
+- 更新时间：2026-10-07 21:36 China Standard Time
 - 本次工作者：Cursor Agent（Claude Opus 5.5），AZ-Laptop-7（Windows 11）
 - 状态：进行中
 
@@ -19,12 +19,13 @@
 - 设置窗口（Mica + NavigationView）：通用（开机自启、刷新间隔、立即刷新）、工具（开关、状态、数据来源说明、API Key / Cookie 保存与移除、Claude 凭据授权）、关于。
 - 套餐名简化（`PlanLabel`：Claude `default_claude_ai` → Pro 等）。
 - Cursor：条目名照 CodexBar 改成 Total / Cursor / Third Party；`cost` 是按 API 价折算（"Token cost (metered)"），显示为「API 价值 $x / 套餐 $20」，不再写成花费。
+- 配色（AZ 指定）：Codex 蓝 `#3B82F6`、Claude 橙 `#E8803A`、Cursor 绿 `#22C55E`、OpenCode Zen / Go 黄 `#EAB308`；只在 `Models/UsageModels.cs` 的 `Providers.All` 定义一次，标签小条和用量条同色（选中标签也一样）。待定：Antigravity 的绿 `#60BA7E` 和 Cursor 接近，要不要换色还没问到答复。
 - Grok 图标换成 CodexBar 的官方标志（原 Win-CodexBar 那个是画的 "G"）。
 - fork 新增 `config set-cookie / remove-cookie / remove-api-key / credentials --json`（值走 stdin，从不打印），已推到 fork `main`。
 
 ## 成果与版本
 
-- 分支 `main`，快照基于 `01f2fc9`（之后的提交即本次成果）。
+- 分支 `main`，快照基于 `cfef14c`（配色提交；之后的提交只是交接记录）。
 - 仓库 2026-10-07 起公开（MIT，`LICENSE`、`README.md`）。按 AZ-WORKFLOW，公开仓库平时只提交不推送，「交接项目」时再推。
 - `.gitmodules` 的子模块地址改成 HTTPS，方便别人克隆；本机 `.git/config` 里仍是 SSH。
 - 总览截图改名为 `docs/screenshots/overview.png`（旧的 `flyout-overview.png` 被看图程序占用，已从仓库移除，本地残留可删）。

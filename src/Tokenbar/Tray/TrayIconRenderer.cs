@@ -10,7 +10,9 @@ namespace Tokenbar.Tray;
 internal static class TrayIconRenderer
 {
     private const double Canvas = 36;
-    private const double BarX = 3, BarW = 30;
+    // CodexBar insets the bars (x 3..33, y 5..31) to suit the macOS menu bar; the Windows tray
+    // slot has no such padding needs, so the meter fills nearly the whole square.
+    private const double BarX = 1, BarW = 34;
     private const double StrokeW = 2;
     private const int Supersample = 4;
 
@@ -33,10 +35,10 @@ internal static class TrayIconRenderer
 
     private static Bar[] Layout(double? primary, double? secondary)
     {
-        // y measured from the top of the canvas (CodexBar uses bottom-up AppKit coordinates).
-        var top = new Bar(36 - 31, 12, primary);
-        var bottom = new Bar(36 - 13, 8, secondary);
-        var single = new Bar(36 - 30, 16, primary ?? secondary);
+        // Keeps CodexBar's 3:2 thick-over-thin proportion, scaled up to the tray slot.
+        var top = new Bar(3, 15, primary);
+        var bottom = new Bar(22, 10, secondary);
+        var single = new Bar(8, 20, primary ?? secondary);
 
         if (primary is not null && secondary is not null) return [top, bottom];
         if (primary is null && secondary is null) return [top, bottom with { Alpha = 0.45 }];
